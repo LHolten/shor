@@ -97,24 +97,73 @@ def modulo_add(
     carry(circ, a, c, v)  # compare v < a
 
 
-# calculates v**e % N
-# assumes a and c are zeroed
-def modulo_exp(
+# calculates a - v % N if i
+# assumes c is zeroed
+def modulo_sub(
     circ: QuantumCircuit,
     a: QuantumRegister,
     c: QuantumRegister,
-    e: QuantumRegister,
+    i: Qubit,
     v: int,
     N: int,
 ):
-    for i in range(len(e)):
-        modulo_add(circ, a, c, e[i], v ** i % N, N)
+    carry(circ, a, c, v)  # compare v < a
+    circ.ccx(i, c[-1], c[-2])
+    circ.cx(c[-2], i)
+    add_const(circ, a, c[:-1] + [i], -v, N - v)
+    circ.cx(c[-2], i)
+    circ.ccx(i, c[-1], c[-2])
+    carry(circ, a, c, v - N)  # compare v - N < a
+
+
+# calculates v * x % N
+# assumes a and c are zeroed
+def modulo_mul(
+    circ: QuantumCircuit,
+    a: QuantumRegister,  # sum
+    c: QuantumRegister,  # zero
+    x: QuantumRegister,  # mul
+    e: QuantumRegister,  # control bit
+    v: int,
+    N: int,
+):
+    for i in range(len(x)):
+        circ.ccx(e[0], x[i], e[-1])
+        modulo_add(circ, a, c, e[-1], v << i % N, N)
+        circ.ccx(e[0], x[i], e[-1])
+    for i in range(len(x)):
+        circ.cswap(e[0], a[i], x[i])
+    for i in range(len(x)):
+        circ.ccx(e[0], x[i], e[-1])
+        modulo_sub(
+            circ, a, c, e[-1], mmi(v << i, N), N
+        )  # need to calculate modular multiplicative inverse somehow
+        circ.ccx(e[0], x[i], e[-1])
+
+
+def modulo_exp(
+    circ: QuantumCircuit,
+    a: QuantumRegister,  # sum
+    c: QuantumRegister,  # zero bits
+    x: QuantumRegister,  # mul
+    e: QuantumRegister,  # exponent
+    v: int,
+    N: int,
+):
+    circ.x(x[0])
+    for i in range(len(a)):
+        if i != 0:
+            circ.swap(e[0], e[i])
+        modulo_mul(circ, a, c, x, e, v ** (2 << i) % N, N)
+        if i != 0:
+            circ.swap(e[0], e[i])
 
 
 if __name__ == "__main__":
     x = QuantumRegister(4, "x")
     a = QuantumRegister(4, "a")
     c = QuantumRegister(4, "c")
-    circ = QuantumCircuit(x, a, c)
-    modulo_exp(circ, a, c, x, 2, 15)
+    e = QuantumRegister(5, "e")
+    circ = QuantumCircuit(x, a, c, e)
+    modulo_exp(circ, a, c, x, e, 2, 15)
     print(circ.draw("text"))
