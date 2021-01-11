@@ -1,4 +1,22 @@
-from qiskit.circuit import QuantumRegister, QuantumCircuit, Qubit
+from qiskit.circuit import QuantumRegister, QuantumCircuit, Qubit, ClassicalRegister
+from qiskit import Aer, execute
+
+
+def egcd(a, b):
+    if a == 0:
+        return (b, 0, 1)
+    else:
+        g, y, x = egcd(b % a, a)
+        return (g, x - (b // a) * y, y)
+
+
+def modinv(a, m):
+    g, x, y = egcd(a, m)
+    if g != 1:
+        raise Exception("modular inverse does not exist")
+    else:
+        return x % m
+
 
 # calculates the overflow bit for a + v while leaving everything else untouched
 # assumes c is zeroed, the result is stored in c[-1]
@@ -43,7 +61,7 @@ def add_const(
     if v2 & 1:
         circ.ccx(c2, a[0], c[0])
 
-    for i in range(1, last):
+    for i in range(1, len(c)):
         if v1 & 1 << i:
             circ.ccx(c1, a[i], c[i])
             circ.cx(c1, a[i])
@@ -136,7 +154,7 @@ def modulo_mul(
     for i in range(len(x)):
         circ.ccx(e[0], x[i], e[-1])
         modulo_sub(
-            circ, a, c, e[-1], mmi(v << i, N), N
+            circ, a, c, e[-1], modinv(v << i, N), N
         )  # need to calculate modular multiplicative inverse somehow
         circ.ccx(e[0], x[i], e[-1])
 
@@ -164,6 +182,21 @@ if __name__ == "__main__":
     a = QuantumRegister(4, "a")
     c = QuantumRegister(4, "c")
     e = QuantumRegister(5, "e")
-    circ = QuantumCircuit(x, a, c, e)
-    modulo_exp(circ, a, c, x, e, 2, 15)
-    print(circ.draw("text"))
+    r = ClassicalRegister(4, "r")
+    circ = QuantumCircuit(x, a, c, e, r)
+
+    # modulo_exp(circ, a, c, x, e, 2, 15)
+    circ.x(c[-1])
+    add_const(circ, a, c, 13, 5)
+    circ.x(c[-1])
+    carry(circ, a, c, 11)
+    circ.measure(c, r)
+
+    # Select the StatevectorSimulator from the Aer provider
+    simulator = Aer.get_backend("qasm_simulator")
+
+    # Execute and get counts
+    result = execute(circ, simulator, shots=10).result()
+    print(result.get_counts(circ))
+
+    # print(circ.draw("text"))
