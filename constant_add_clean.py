@@ -51,10 +51,11 @@ def carry(n: int, v: int) -> QuantumCircuit:
 
 # calculates a + v1 if c1 and a + v2 if c2
 # assumes c[:-2] is zeroed
-def add_const(
-    circ: QuantumCircuit, a: QuantumRegister, c: QuantumRegister, v1: int, v2: int
-):
-    assert len(a) == len(c)
+def add_const(n: int, v1: int, v2: int) -> QuantumCircuit:
+    a = QuantumRegister(n, "a")
+    c = QuantumRegister(n, "c")
+    circ = QuantumCircuit(a, c)
+
     c1, c2 = c[-2:]  # two extra control bits
     c = c[:-2] + a[-1:]
     last = len(c) - 1
@@ -98,44 +99,29 @@ def add_const(
         circ.ccx(c2, a[0], c[0])
         circ.cx(c2, a[0])
 
+    return circ
+
 
 # calculates a + v % N if i
 # assumes c is zeroed
-def modulo_add(
-    circ: QuantumCircuit,
-    a: QuantumRegister,
-    c: QuantumRegister,
-    i: Qubit,
-    v: int,
-    N: int,
-):
-    circ.extend(carry(4, v - N))
+def modulo_add(n: int, v: int, N: int,) -> QuantumCircuit:
+    a = QuantumRegister(n, "a")
+    c = QuantumRegister(n, "c")
+    i = QuantumRegister(1, "i")
+    circ = QuantumCircuit(a, c, i)
+
+    circ.extend(carry(n, v - N))
     circ.ccx(i, c[-1], c[-2])
     circ.cx(c[-2], i)
-    add_const(circ, a, c[:-1] + [i], v - N, v)
+    circ.swap(c[-1], i)
+    circ.extend(add_const(n, v - N, v))
+    circ.swap(c[-1], i)
     circ.cx(c[-2], i)
     circ.ccx(i, c[-1], c[-2])
-    circ.extend(carry(4, -v))
+    circ.extend(carry(n, -v))
     circ.x(c[-1])
 
-
-# calculates a - v % N if i
-# assumes c is zeroed
-def modulo_sub(
-    circ: QuantumCircuit,
-    a: QuantumRegister,
-    c: QuantumRegister,
-    i: Qubit,
-    v: int,
-    N: int,
-):
-    carry(circ, a, c, v)  # compare v < a
-    circ.ccx(i, c[-1], c[-2])
-    circ.cx(c[-2], i)
-    add_const(circ, a, c[:-1] + [i], -v, N - v)
-    circ.cx(c[-2], i)
-    circ.ccx(i, c[-1], c[-2])
-    carry(circ, a, c, v - N)  # compare v - N < a
+    return circ
 
 
 # calculates v * x % N
@@ -185,14 +171,14 @@ if __name__ == "__main__":
     x = QuantumRegister(4, "x")
     a = QuantumRegister(4, "a")
     c = QuantumRegister(4, "c")
-    e = QuantumRegister(5, "e")
+    i = QuantumRegister(1, "i")
     r = ClassicalRegister(4, "r")
-    circ = QuantumCircuit(x, a, c, e, r)
+    circ = QuantumCircuit(x, a, c, i, r)
 
     # modulo_exp(circ, a, c, x, e, 2, 15)
-    circ.x(x[0])
-    modulo_add(circ, a, c, x[0], 7, 15)
-    modulo_add(circ, a, c, x[0], 7, 15)
+    circ.x(i[0])
+    circ.extend(modulo_add(4, 7, 15))
+    circ.extend(modulo_add(4, 8, 15))
     circ.measure(a, r)
 
     # Select the StatevectorSimulator from the Aer provider
