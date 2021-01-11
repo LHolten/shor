@@ -18,12 +18,13 @@ def modinv(a, m):
         return x % m
 
 
-# calculates the overflow bit for a + v while leaving everything else untouched
-# assumes c is zeroed, the result is stored in c[-1]
+# calculates the overflow bit for a + v if e[1]
+# assumes c is zeroed, the result is stored in e[2]
 def carry(n: int, v: int) -> QuantumCircuit:
     a = QuantumRegister(n, "a")
     c = QuantumRegister(n, "c")
-    circ = QuantumCircuit(a, c)
+    e = QuantumRegister(3, "e")
+    circ = QuantumCircuit(a, c, e)
 
     if v & 1:
         circ.cx(a[0], c[0])
@@ -34,10 +35,9 @@ def carry(n: int, v: int) -> QuantumCircuit:
             circ.x(a[i])
         circ.ccx(c[i - 1], a[i], c[i])
 
-    if v & 1 << (n - 1):
-        circ.x(a[n - 1])
+    circ.ccx(c[-1], e[1], e[2])
 
-    for i in reversed(range(1, n - 1)):
+    for i in reversed(range(1, n)):
         circ.ccx(c[i - 1], a[i], c[i])
         if v & 1 << i:
             circ.x(a[i])
@@ -102,84 +102,66 @@ def add_const(n: int, v1: int, v2: int) -> QuantumCircuit:
     return circ
 
 
-# calculates a + v % N if i
+# calculates a + v % N if e[1]
 # assumes c is zeroed
 def modulo_add(n: int, v: int, N: int,) -> QuantumCircuit:
     a = QuantumRegister(n, "a")
     c = QuantumRegister(n, "c")
-    i = QuantumRegister(1, "i")
-    circ = QuantumCircuit(a, c, i)
+    e = QuantumRegister(3, "e")
+    circ = QuantumCircuit(a, c, e)
 
-    circ.extend(carry(n, v - N))
-    circ.ccx(i, c[-1], c[-2])
-    circ.cx(c[-2], i)
-    circ.swap(c[-1], i)
+    circ.extend(carry(n, v - N))  # set e[2]
+    circ.ccx(e[1], e[2], c[-2])
+    circ.x(e[2])
+    circ.ccx(e[1], e[2], c[-1])
     circ.extend(add_const(n, v - N, v))
-    circ.swap(c[-1], i)
-    circ.cx(c[-2], i)
-    circ.ccx(i, c[-1], c[-2])
-    circ.extend(carry(n, -v))
-    circ.x(c[-1])
+    circ.ccx(e[1], e[2], c[-1])
+    circ.x(e[2])
+    circ.ccx(e[1], e[2], c[-2])
+    circ.extend(carry(n, -v))  # clean up e[2]
+    circ.cx(e[1], e[2])
 
     return circ
 
 
-# calculates v * x % N
+# calculates v * x % N if e[0]
 # assumes a and c are zeroed
-def modulo_mul(
-    circ: QuantumCircuit,
-    a: QuantumRegister,  # sum
-    c: QuantumRegister,  # zero
-    x: QuantumRegister,  # mul
-    e: QuantumRegister,  # control bit
-    v: int,
-    N: int,
-):
-    for i in range(len(x)):
-        circ.ccx(e[0], x[i], e[-1])
-        modulo_add(circ, a, c, e[-1], v << i % N, N)
-        circ.ccx(e[0], x[i], e[-1])
-    for i in range(len(x)):
+def modulo_mul(n: int, v: int, N: int,) -> QuantumCircuit:
+    a = QuantumRegister(n, "a")
+    c = QuantumRegister(n, "c")
+    x = QuantumRegister(n, "x")
+    e = QuantumRegister(3, "e")
+    circ = QuantumCircuit(a, c, x, e)
+
+    v_inv = modinv(v, N)
+
+    for i in range(n):
+        circ.ccx(e[0], x[i], e[1])
+        circ.extend(modulo_add(n, (v << i) % N, N))
+        circ.ccx(e[0], x[i], e[1])
+    for i in range(n):
         circ.cswap(e[0], a[i], x[i])
-    for i in range(len(x)):
-        circ.ccx(e[0], x[i], e[-1])
-        modulo_sub(
-            circ, a, c, e[-1], modinv(v << i, N), N
-        )  # need to calculate modular multiplicative inverse somehow
-        circ.ccx(e[0], x[i], e[-1])
+    for i in range(n):
+        circ.ccx(e[0], x[i], e[1])
+        circ.extend(modulo_add(n, (v_inv << i) % N, N).inverse())
+        circ.ccx(e[0], x[i], e[1])
 
-
-def modulo_exp(
-    circ: QuantumCircuit,
-    a: QuantumRegister,  # sum
-    c: QuantumRegister,  # zero bits
-    x: QuantumRegister,  # mul
-    e: QuantumRegister,  # exponent
-    v: int,
-    N: int,
-):
-    circ.x(x[0])
-    for i in range(len(a)):
-        if i != 0:
-            circ.swap(e[0], e[i])
-        modulo_mul(circ, a, c, x, e, v ** (2 << i) % N, N)
-        if i != 0:
-            circ.swap(e[0], e[i])
+    return circ
 
 
 if __name__ == "__main__":
     x = QuantumRegister(4, "x")
     a = QuantumRegister(4, "a")
     c = QuantumRegister(4, "c")
-    i = QuantumRegister(1, "i")
+    e = QuantumRegister(3, "e")
     r = ClassicalRegister(4, "r")
-    circ = QuantumCircuit(x, a, c, i, r)
+    circ = QuantumCircuit(x, a, c, e, r)
 
-    # modulo_exp(circ, a, c, x, e, 2, 15)
-    circ.x(i[0])
-    circ.extend(modulo_add(4, 7, 15))
-    circ.extend(modulo_add(4, 8, 15))
-    circ.measure(a, r)
+    circ.x(e[0])  # enable multiplication
+    circ.x(x[0])  # start with value 1
+    circ.extend(modulo_mul(4, 7, 15))
+    circ.extend(modulo_mul(4, 7, 15))
+    circ.measure(x, r)
 
     # Select the StatevectorSimulator from the Aer provider
     simulator = Aer.get_backend("qasm_simulator")
