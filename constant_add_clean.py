@@ -20,23 +20,24 @@ def modinv(a, m):
 
 # calculates the overflow bit for a + v while leaving everything else untouched
 # assumes c is zeroed, the result is stored in c[-1]
-def carry(circ: QuantumCircuit, a: QuantumRegister, c: QuantumRegister, v: int):
-    assert len(a) == len(c)
-    last = len(a) - 1
+def carry(n: int, v: int) -> QuantumCircuit:
+    a = QuantumRegister(n, "a")
+    c = QuantumRegister(n, "c")
+    circ = QuantumCircuit(a, c)
 
     if v & 1:
         circ.cx(a[0], c[0])
 
-    for i in range(1, len(a)):
+    for i in range(1, n):
         if v & 1 << i:
             circ.cx(a[i], c[i])
             circ.x(a[i])
         circ.ccx(c[i - 1], a[i], c[i])
 
-    if v & 1 << last:
-        circ.x(a[last])
+    if v & 1 << (n - 1):
+        circ.x(a[n - 1])
 
-    for i in reversed(range(1, last)):
+    for i in reversed(range(1, n - 1)):
         circ.ccx(c[i - 1], a[i], c[i])
         if v & 1 << i:
             circ.x(a[i])
@@ -44,6 +45,8 @@ def carry(circ: QuantumCircuit, a: QuantumRegister, c: QuantumRegister, v: int):
 
     if v & 1:
         circ.cx(a[0], c[0])
+
+    return circ
 
 
 # calculates a + v1 if c1 and a + v2 if c2
@@ -106,13 +109,14 @@ def modulo_add(
     v: int,
     N: int,
 ):
-    carry(circ, a, c, v - N)  # compare v - N < a
+    circ.extend(carry(4, v - N))
     circ.ccx(i, c[-1], c[-2])
     circ.cx(c[-2], i)
-    add_const(circ, a, c[:-1] + [i], v, v - N)
+    add_const(circ, a, c[:-1] + [i], v - N, v)
     circ.cx(c[-2], i)
     circ.ccx(i, c[-1], c[-2])
-    carry(circ, a, c, v)  # compare v < a
+    circ.extend(carry(4, -v))
+    circ.x(c[-1])
 
 
 # calculates a - v % N if i
@@ -186,11 +190,10 @@ if __name__ == "__main__":
     circ = QuantumCircuit(x, a, c, e, r)
 
     # modulo_exp(circ, a, c, x, e, 2, 15)
-    circ.x(c[-1])
-    add_const(circ, a, c, 13, 5)
-    circ.x(c[-1])
-    carry(circ, a, c, 11)
-    circ.measure(c, r)
+    circ.x(x[0])
+    modulo_add(circ, a, c, x[0], 7, 15)
+    modulo_add(circ, a, c, x[0], 7, 15)
+    circ.measure(a, r)
 
     # Select the StatevectorSimulator from the Aer provider
     simulator = Aer.get_backend("qasm_simulator")
