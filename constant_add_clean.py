@@ -1,5 +1,7 @@
 from qiskit.circuit import QuantumRegister, QuantumCircuit, Qubit, ClassicalRegister
 from qiskit import Aer, execute
+from math import pi
+from collections import defaultdict
 
 
 def egcd(a, b):
@@ -104,7 +106,7 @@ def add_const(n: int, v1: int, v2: int) -> QuantumCircuit:
 
 # calculates a + v % N if e[1]
 # assumes c is zeroed
-def modulo_add(n: int, v: int, N: int,) -> QuantumCircuit:
+def modulo_add(n: int, v: int, N: int) -> QuantumCircuit:
     a = QuantumRegister(n, "a")
     c = QuantumRegister(n, "c")
     e = QuantumRegister(3, "e")
@@ -126,7 +128,7 @@ def modulo_add(n: int, v: int, N: int,) -> QuantumCircuit:
 
 # calculates v * x % N if e[0]
 # assumes a and c are zeroed
-def modulo_mul(n: int, v: int, N: int,) -> QuantumCircuit:
+def modulo_mul(n: int, v: int, N: int) -> QuantumCircuit:
     a = QuantumRegister(n, "a")
     c = QuantumRegister(n, "c")
     x = QuantumRegister(n, "x")
@@ -149,25 +151,63 @@ def modulo_mul(n: int, v: int, N: int,) -> QuantumCircuit:
     return circ
 
 
-if __name__ == "__main__":
-    x = QuantumRegister(4, "x")
-    a = QuantumRegister(4, "a")
-    c = QuantumRegister(4, "c")
+def quantum_period(n: int, v: int, N: int) -> QuantumCircuit:
+    x = QuantumRegister(n, "x")
+    a = QuantumRegister(n, "a")
+    c = QuantumRegister(n, "c")
     e = QuantumRegister(3, "e")
-    r = ClassicalRegister(4, "r")
+    r = ClassicalRegister(2 * n, "r")
     circ = QuantumCircuit(x, a, c, e, r)
-
-    circ.x(e[0])  # enable multiplication
     circ.x(x[0])  # start with value 1
-    circ.extend(modulo_mul(4, 7, 15))
-    circ.extend(modulo_mul(4, 7, 15))
-    circ.measure(x, r)
 
-    # Select the StatevectorSimulator from the Aer provider
+    for i in range(2 * n):
+        circ.h(e[0])
+        circ.extend(modulo_mul(n, v ** (1 << i), N))
+        for bits in range(1 << i):
+            angle = sum([pi / 2 ** (i - j) for j in range(i) if bits & 1 << j])
+            circ.p(angle, e[0]).c_if(r, bits)
+        circ.h(e[0])
+        circ.measure(e[0], r[i])
+        for bits in range(1 << i):
+            circ.x(e[0]).c_if(r, 1 << i | bits)
+
+    return circ
+
+
+def to_expansion(a: int, b: int) -> list:
+    if a == 0 or b == 0:
+        return []
+    return [a // b] + to_expansion(b, a % b)
+
+
+def from_expansion(e: list) -> (int, int):
+    if len(e) == 0:
+        return 1, 0
+    a, b = from_expansion(e[1:])
+    return e[0] * a + b, a
+
+
+def post_process(y: int, n: int, N: int) -> int:
+    Q = 1 << 2 * n
+    expansion = to_expansion(y, Q)
+    for i in range(len(expansion)):
+        d, s = from_expansion(expansion[: i + 1])
+        if abs(d / s - y / Q) < 1 / (2 * Q) and s < N:
+            return s
+    return 0
+
+
+if __name__ == "__main__":
+    circ = quantum_period(4, 2, 15)
     simulator = Aer.get_backend("qasm_simulator")
 
     # Execute and get counts
-    result = execute(circ, simulator, shots=10).result()
-    print(result.get_counts(circ))
+    result = execute(circ, simulator).result().get_counts(circ)
+    period = defaultdict(int)
+    for value, times in result.items():
+        value = int(value[::-1], 2)
+        period[post_process(value, 4, 15)] += times
+
+    print(period)
 
     # print(circ.draw("text"))
