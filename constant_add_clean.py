@@ -151,31 +151,50 @@ def modulo_mul(n: int, v: int, N: int) -> QuantumCircuit:
     return circ
 
 
+def modulo_exp(n: int, v: int, exp: int, N: int):
+    x = QuantumRegister(n, "x")
+    a = QuantumRegister(n, "a")
+    c = QuantumRegister(n, "c")
+    e = QuantumRegister(3, "e")
+    r = ClassicalRegister(n, "r")
+    circ = QuantumCircuit(x, a, c, e, r)
+    circ.x(x[0])  # start with value 1
+
+    for i in range(2 * n):
+        if exp & 1 << i:
+            circ.x(e[0])
+        circ.extend(modulo_mul(n, v ** (1 << i), N))
+        if exp & 1 << i:
+            circ.x(e[0])
+
+    circ.measure(x, r)
+    return circ
+
+
 def quantum_period(n: int, v: int, N: int) -> QuantumCircuit:
     x = QuantumRegister(n, "x")
     a = QuantumRegister(n, "a")
     c = QuantumRegister(n, "c")
     e = QuantumRegister(3, "e")
-    r = ClassicalRegister(2 * n, "r")
-    circ = QuantumCircuit(x, a, c, e, r)
+    r = [ClassicalRegister(1) for r in range(2 * n)]
+    circ = QuantumCircuit(x, a, c, e, *r)
     circ.x(x[0])  # start with value 1
 
     for i in range(2 * n):
+        power = 2 * n - 1 - i  # need to handle the bit power first
         circ.h(e[0])
-        circ.extend(modulo_mul(n, v ** (1 << i), N))
-        for bits in range(1 << i):
-            angle = sum([pi / 2 ** (i - j) for j in range(i) if bits & 1 << j])
-            circ.p(angle, e[0]).c_if(r, bits)
+        circ.extend(modulo_mul(n, v ** (1 << power), N))
+        for j in range(i):
+            circ.p(-pi / 2 ** (i - j), e[0]).c_if(r[j], 1)
         circ.h(e[0])
         circ.measure(e[0], r[i])
-        for bits in range(1 << i):
-            circ.x(e[0]).c_if(r, 1 << i | bits)
+        circ.x(e[0]).c_if(r[i], 1)
 
     return circ
 
 
 def to_expansion(a: int, b: int) -> list:
-    if a == 0 or b == 0:
+    if b == 0:
         return []
     return [a // b] + to_expansion(b, a % b)
 
@@ -190,11 +209,11 @@ def from_expansion(e: list) -> (int, int):
 def post_process(y: int, n: int, N: int) -> int:
     Q = 1 << 2 * n
     expansion = to_expansion(y, Q)
-    for i in range(len(expansion)):
-        d, s = from_expansion(expansion[: i + 1])
-        if abs(d / s - y / Q) < 1 / (2 * Q) and s < N:
-            return s
-    return 0
+    for i in reversed(range(len(expansion))):
+        s, r = from_expansion(expansion[: i + 1])
+        if r < N and abs(s / r - y / Q) <= 1 / (2 * Q) and r < N:
+            return r  # r is very likely to be a factor of the period
+    return 0  # not supposed to happen
 
 
 if __name__ == "__main__":
@@ -203,11 +222,20 @@ if __name__ == "__main__":
 
     # Execute and get counts
     result = execute(circ, simulator).result().get_counts(circ)
+    result = {k[::2]: v for k, v in result.items()}
+
+    print(result)
+
     period = defaultdict(int)
     for value, times in result.items():
-        value = int(value[::-1], 2)
+        value = int(value, 2)
         period[post_process(value, 4, 15)] += times
 
     print(period)
 
     # print(circ.draw("text"))
+
+    # for j in range(10):
+    #     circ = modulo_exp(4, 2, j, 15)
+    #     simulator = Aer.get_backend("qasm_simulator")
+    #     print(execute(circ, simulator).result().get_counts(circ))
