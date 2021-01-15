@@ -1,6 +1,6 @@
 from qiskit.circuit import QuantumRegister, QuantumCircuit, Qubit, ClassicalRegister
 from qiskit import Aer, execute
-from math import pi
+from math import pi, log, ceil, gcd
 from collections import defaultdict
 
 
@@ -217,11 +217,15 @@ def post_process(y: int, n: int, N: int) -> int:
 
 
 if __name__ == "__main__":
-    circ = quantum_period(4, 2, 15)
+    a,N = 2, 15
+    n = ceil(log(N,2))
+    shots = 5
+                  
+    circ = quantum_period(n, a, N)
     simulator = Aer.get_backend("qasm_simulator")
 
     # Execute and get counts
-    result = execute(circ, simulator).result().get_counts(circ)
+    result = execute(circ, simulator, shots=shots).result().get_counts(circ)
     result = {k[::2]: v for k, v in result.items()}
 
     print(result)
@@ -229,10 +233,20 @@ if __name__ == "__main__":
     period = defaultdict(int)
     for value, times in result.items():
         value = int(value, 2)
-        period[post_process(value, 4, 15)] += times
-
+        period[post_process(value, n, N)] += times
+    
     print(period)
 
+    for r in (list(period.keys())):
+        if (r % 2):
+            continue
+        else:
+            x = int(a**(r/2) % N)
+            if (x + 1) % N != 0:
+                p,q = gcd(x+1,N), gcd(x-1,N)
+                if (p*q==N) and p>1 and q>1:
+                    print("Prime factors found: {}, {}".format(p,q))
+        
     # print(circ.draw("text"))
 
     # for j in range(10):
