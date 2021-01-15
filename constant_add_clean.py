@@ -188,7 +188,7 @@ def quantum_period(n: int, v: int, N: int) -> QuantumCircuit:
             circ.p(-pi / 2 ** (i - j), e[0]).c_if(r[j], 1)
         circ.h(e[0])
         circ.measure(e[0], r[i])
-        circ.x(e[0]).c_if(r[i], 1)
+        # circ.x(e[0]).c_if(r[i], 1)
 
     return circ
 
@@ -217,10 +217,10 @@ def post_process(y: int, n: int, N: int) -> int:
 
 
 if __name__ == "__main__":
-    a,N = 2, 15
-    n = ceil(log(N,2))
+    a, N = 2, 15
+    n = ceil(log(N, 2))
     shots = 5
-                  
+
     circ = quantum_period(n, a, N)
     simulator = Aer.get_backend("qasm_simulator")
 
@@ -234,19 +234,19 @@ if __name__ == "__main__":
     for value, times in result.items():
         value = int(value, 2)
         period[post_process(value, n, N)] += times
-    
+
     print(period)
 
-    for r in (list(period.keys())):
-        if (r % 2):
+    for r in list(period.keys()):
+        if r % 2:
             continue
         else:
-            x = int(a**(r/2) % N)
+            x = int(a ** (r / 2) % N)
             if (x + 1) % N != 0:
-                p,q = gcd(x+1,N), gcd(x-1,N)
-                if (p*q==N) and p>1 and q>1:
-                    print("Prime factors found: {}, {}".format(p,q))
-        
+                p, q = gcd(x + 1, N), gcd(x - 1, N)
+                if (p * q == N) and p > 1 and q > 1:
+                    print("Prime factors found: {}, {}".format(p, q))
+
     # print(circ.draw("text"))
 
     # for j in range(10):
