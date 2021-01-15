@@ -1,7 +1,8 @@
 from qiskit.circuit import QuantumRegister, QuantumCircuit, Qubit, ClassicalRegister
-from math import pi
+from math import pi, ceil, log, gcd
 from qiskit import Aer, execute
 from utils import modinv, post_process
+from collections import defaultdict
 
 
 # `n` has to be at least 2
@@ -75,7 +76,7 @@ def qft(n: int):
 
 
 # adds one or two constants based on e[1] and e[2]
-def fourier_add_const(n: int, v1: int, v2: int):
+def add_const(n: int, v1: int, v2: int):
     a = QuantumRegister(n, "a")
     e = QuantumRegister(3, "e")
     circ = QuantumCircuit(a, e)
@@ -90,14 +91,14 @@ def fourier_add_const(n: int, v1: int, v2: int):
 
 
 # adds a constants `v` modulo `N` conditioned on x[0]
-def fourier_modulo_add(n: int, v: int, N: int):
+def modulo_add(n: int, v: int, N: int):
     a = QuantumRegister(n, "a")
     x = QuantumRegister(n, "x")
     e = QuantumRegister(3, "e")
     circ = QuantumCircuit(a, x, e)
 
     circ.extend(carry_dirty(n, v - N))  # set e[1] and e[2]
-    circ.extend(fourier_add_const(n, v - N, v))
+    circ.extend(add_const(n, v - N, v))
     circ.extend(carry_dirty(n, -v))  # clean up e[1] and e[2]
     circ.cx(x[0], e[1])
     circ.cx(x[0], e[2])
@@ -124,7 +125,7 @@ def modulo_mul(n: int, v: int, N: int) -> QuantumCircuit:
     for i in range(n):
         if i != 0:
             circ.swap(x[i], x[0])
-        circ.extend(fourier_modulo_add(n, (v << i) % N, N))
+        circ.extend(modulo_add(n, (v << i) % N, N))
         if i != 0:
             circ.swap(x[i], x[0])
     # swap `a` and `x` if e[0]
@@ -134,7 +135,7 @@ def modulo_mul(n: int, v: int, N: int) -> QuantumCircuit:
     for i in range(n):
         if i != 0:
             circ.swap(x[i], x[0])
-        circ.extend(fourier_modulo_add(n, (v_inv << i) % N, N).inverse())
+        circ.extend(modulo_add(n, (v_inv << i) % N, N).inverse())
         if i != 0:
             circ.swap(x[i], x[0])
     # swap `a` and `x` if not e[0]
@@ -146,26 +147,63 @@ def modulo_mul(n: int, v: int, N: int) -> QuantumCircuit:
     return circ
 
 
-if __name__ == "__main__":
-    n = 4
-    a = QuantumRegister(n, "a")
+def modulo_exp(n: int, v: int, exp: int, N: int):
     x = QuantumRegister(n, "x")
+    a = QuantumRegister(n, "a")
     e = QuantumRegister(3, "e")
     r = ClassicalRegister(n, "r")
-    circ = QuantumCircuit(a, x, e, r)
-    circ.x(x[0])  # set `x` to 1
-    circ.x(e[0])  # enable multiplication
-    circ.extend(modulo_mul(n, 2, 15))
-    circ.extend(modulo_mul(n, 2, 15))
-    circ.extend(modulo_mul(n, 2, 15))
-    circ.extend(modulo_mul(n, 2, 15))
-    # circ.extend(fourier_modulo_add(n, 7, 15))
-    # circ.extend(carry_dirty(n, -2))
-    circ.measure(x, r)
+    circ = QuantumCircuit(x, a, e, r)
+    circ.x(x[0])  # start with value 1
 
+    for i in range(2 * n):
+        if exp & 1 << i:
+            circ.x(e[0])
+        circ.extend(modulo_mul(n, v ** (1 << i), N))
+        if exp & 1 << i:
+            circ.x(e[0])
+
+    circ.measure(x, r)
+    return circ
+
+
+def quantum_period(n: int, v: int, N: int) -> QuantumCircuit:
+    x = QuantumRegister(n, "x")
+    a = QuantumRegister(n, "a")
+    e = QuantumRegister(3, "e")
+    r = [ClassicalRegister(1) for r in range(2 * n)]
+    circ = QuantumCircuit(x, a, e, *r)
+    circ.x(x[0])  # start with value 1
+
+    for i in range(2 * n):
+        power = 2 * n - 1 - i  # need to handle the bit power first
+        circ.h(e[0])
+        circ.extend(modulo_mul(n, v ** (1 << power), N))
+        for j in range(i):
+            circ.p(-pi / 2 ** (i - j), e[0]).c_if(r[j], 1)
+        circ.h(e[0])
+        circ.measure(e[0], r[i])
+        circ.x(e[0]).c_if(r[i], 1)
+
+    return circ
+
+
+if __name__ == "__main__":
+    a, N = 5, 21
+    n = ceil(log(N, 2))
+    shots = 20
+
+    circ = quantum_period(n, a, N)
     simulator = Aer.get_backend("qasm_simulator")
-    result = execute(circ, simulator).result().get_counts(circ)
+
+    # Execute and get counts
+    result = execute(circ, simulator, shots=shots).result().get_counts(circ)
+    result = {k[::2]: v for k, v in result.items()}
+
     print(result)
 
-    # print(circ.draw("text"))
+    period = defaultdict(int)
+    for value, times in result.items():
+        value = int(value, 2)
+        period[post_process(value, n, N)] += times
 
+    print(period)
