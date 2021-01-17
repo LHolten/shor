@@ -186,10 +186,10 @@ def factor_finder(r: int):
             p, q = gcd(x + 1, N), gcd(x - 1, N)
             if (p * q == N) and p > 1 and q > 1:
                 return [p,q]
-            elif p > 1:
+            elif N > p > 1:
                 other = int(N/p)
                 return [p, other]
-            elif q > 1:
+            elif N > q > 1:
                 other = int(N/q)
                 return [q, other]
             else:
@@ -198,7 +198,7 @@ def factor_finder(r: int):
             return False
 
 if __name__ == "__main__":
-    a, N = 2, 21
+    a, N = 2, (3*11) #working: 2,9: 2,15; 2,21; 2,33
     n = ceil(log(N, 2))
     shots = 1
     found = False
