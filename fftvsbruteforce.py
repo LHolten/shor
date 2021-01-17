@@ -63,9 +63,9 @@ def prime_factors(n):
     return factors
 
 
-N=29*31
+N=33
 a=2
-iterations = 100
+iterations = 10
 
 time1=time.time()
 print(fft_primefactor(a,iterations,N))

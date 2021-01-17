@@ -198,7 +198,7 @@ def factor_finder(r: int):
             return False
 
 if __name__ == "__main__":
-    a, N = 2, (3*11) #working: 2,9: 2,15; 2,21; 2,33
+    a, N = 5, (3*11) #working: 2,9: 2,15; 2,21;
     n = ceil(log(N, 2))
     shots = 1
     found = False
