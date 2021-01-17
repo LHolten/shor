@@ -15,10 +15,10 @@ import time
 def fft_primefactor(a,num_it,N):
     for i in range(num_it):
         #print(i)
-        print(a)
+        #print(a)
         while gcd(a,N) != 1:
             a+=1
-            print(a)
+            #print(a)
         x = np.arange(20,dtype=object)
         fx = a**x % N
         freq = np.fft.rfftfreq(len(x))[1:-1]
@@ -63,10 +63,11 @@ def prime_factors(n):
     return factors
 
 
-N=29*31
+N=33
 a=2
-iterations = 100
+iterations = 10
 
+"""
 time1=time.time()
 print(fft_primefactor(a,iterations,N))
 time2=time.time()
@@ -75,22 +76,22 @@ print(prime_factors(N))
 time4 = time.time()
 print(time2-time1)
 print(time4-time3)
-
-
-
 """
+
+
+
 #BENCHMARK
 time1=time.time()
-for i in range(100):
+for i in range(10):
     #print(fft_primefactor(a,iterations,N))
     fft_primefactor(a,iterations,N)
 time2=time.time()
 time3=time.time()
-for i in range(100):
+for i in range(10):
     #print(prime_factors(N))
     prime_factors(N)
 time4 = time.time()
 print(time2-time1)
 print(time4-time3)
-"""
+
 

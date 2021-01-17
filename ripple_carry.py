@@ -3,6 +3,7 @@ from qiskit import Aer, execute
 from math import pi, log, ceil, gcd
 from collections import defaultdict
 from utils import modinv, post_process
+from time import time
 
 # calculates the overflow bit for a + v if e[1]
 # assumes c is zeroed, the result is stored in e[2]
@@ -204,32 +205,37 @@ if __name__ == "__main__":
     found = False
 
     simulator = Aer.get_backend("qasm_simulator")
-    
-    while not found:
-       circ = quantum_period(n, a, N)
+    succes = 0
+    timearr = []
+    times = 10
+    for i in range(10):
+        time1 = time()
+        circ = quantum_period(n, a, N)
 
-       # Execute and get counts
-       result = execute(circ, simulator, shots=shots).result().get_counts(circ)
-       result = {k[::2]: v for k, v in result.items()}
+        # Execute and get counts
+        result = execute(circ, simulator, shots=shots).result().get_counts(circ)
+        result = {k[::2]: v for k, v in result.items()}
 
-       print(result)
+        print(result)
 
-       period = defaultdict(int)
-       for value, times in result.items():
-           value = int(value, 2)
-           period[post_process(value, n, N)] += times
+        period = defaultdict(int)
+        for value, times in result.items():
+            value = int(value, 2)
+            period[post_process(value, n, N)] += times
 
-       print (period)
+        print (period)
 
-       for r in list(period.keys()):
-           factor = factor_finder(r)
-           if factor:
-               print("Prime factors found: {}, {}".format(factor[0],factor[1]))
-               found = True
-               break
-       if not found:
-           print("Prime factors not found, trying Shor again.")
-        
+        for r in list(period.keys()):
+            factor = factor_finder(r)
+            if factor:
+                print("Prime factors found: {}, {}".format(factor[0],factor[1]))
+                succes += 1
+                break
+        #if not found:
+        #    print("Prime factors not found, trying Shor again.")
+        timearr.append(time()-time1)
+    print("rate = {}".format(succes/times*100))
+    print("avg time = {}".format(sum(timearr)/times))
     # print(circ.draw("text"))
 
     # for j in range(10):
