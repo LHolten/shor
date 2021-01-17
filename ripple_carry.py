@@ -177,37 +177,59 @@ def quantum_period(n: int, v: int, N: int) -> QuantumCircuit:
     return circ
 
 
-if __name__ == "__main__":
-    a, N = 2, 15
-    n = ceil(log(N, 2))
-    shots = 5
-
-    circ = quantum_period(n, a, N)
-    simulator = Aer.get_backend("qasm_simulator")
-
-    # Execute and get counts
-    result = execute(circ, simulator, shots=shots).result().get_counts(circ)
-    result = {k[::2]: v for k, v in result.items()}
-
-    print(result)
-
-    period = defaultdict(int)
-    for value, times in result.items():
-        value = int(value, 2)
-        period[post_process(value, n, N)] += times
-
-    print(period)
-
-    for r in list(period.keys()):
-        if r % 2:
-            continue
+def factor_finder(r: int):
+    if r % 2:
+        return False
+    else:
+        x = int(a ** (r / 2) % N)
+        if (x + 1) % N != 0:
+            p, q = gcd(x + 1, N), gcd(x - 1, N)
+            if (p * q == N) and p > 1 and q > 1:
+                return [p,q]
+            elif p > 1:
+                other = int(N/p)
+                return [p, other]
+            elif q > 1:
+                other = int(N/q)
+                return [q, other]
+            else:
+                return False
         else:
-            x = int(a ** (r / 2) % N)
-            if (x + 1) % N != 0:
-                p, q = gcd(x + 1, N), gcd(x - 1, N)
-                if (p * q == N) and p > 1 and q > 1:
-                    print("Prime factors found: {}, {}".format(p, q))
+            return False
 
+if __name__ == "__main__":
+    a, N = 2, 21
+    n = ceil(log(N, 2))
+    shots = 1
+    found = False
+
+    simulator = Aer.get_backend("qasm_simulator")
+    
+    while not found:
+       circ = quantum_period(n, a, N)
+
+       # Execute and get counts
+       result = execute(circ, simulator, shots=shots).result().get_counts(circ)
+       result = {k[::2]: v for k, v in result.items()}
+
+       print(result)
+
+       period = defaultdict(int)
+       for value, times in result.items():
+           value = int(value, 2)
+           period[post_process(value, n, N)] += times
+
+       print (period)
+
+       for r in list(period.keys()):
+           factor = factor_finder(r)
+           if factor:
+               print("Prime factors found: {}, {}".format(factor[0],factor[1]))
+               found = True
+               break
+       if not found:
+           print("Prime factors not found, trying Shor again.")
+        
     # print(circ.draw("text"))
 
     # for j in range(10):
