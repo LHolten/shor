@@ -15,8 +15,10 @@ import time
 def fft_primefactor(a,num_it,N):
     for i in range(num_it):
         #print(i)
+        print(a)
         while gcd(a,N) != 1:
             a+=1
+            print(a)
         x = np.arange(20,dtype=object)
         fx = a**x % N
         freq = np.fft.rfftfreq(len(x))[1:-1]
@@ -31,8 +33,14 @@ def fft_primefactor(a,num_it,N):
             x = int(a**(r/2) % N)
             if (x + 1) % N != 0:
                 p,q = gcd(x+1,N), gcd(x-1,N)
-                if (p*q==N) and p>1 and q>1:
+                if (p*q==N) and ((p and q) >1):
                     return [p,q]
+                elif p > 1:
+                    other = N/p
+                    return [other,p]
+                elif q > 1:
+                    other = N/q
+                    return [other,q]
                 else:
                     a+=1
             else:
