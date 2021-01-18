@@ -1,7 +1,7 @@
 from qiskit.circuit import QuantumRegister, QuantumCircuit, Qubit, ClassicalRegister
-from math import pi, ceil, log, gcd
+from math import pi, ceil, log
 from qiskit import Aer, execute
-from utils import modinv, post_process
+from utils import modinv, post_process, factor_finder
 from collections import defaultdict
 
 
@@ -170,12 +170,12 @@ def quantum_period(n: int, v: int, N: int) -> QuantumCircuit:
     x = QuantumRegister(n, "x")
     a = QuantumRegister(n, "a")
     e = QuantumRegister(3, "e")
-    r = [ClassicalRegister(1) for r in range(2 * n)]
+    r = [ClassicalRegister(1) for _ in range(2 * n)]
     circ = QuantumCircuit(x, a, e, *r)
     circ.x(x[0])  # start with value 1
 
     for i in range(2 * n):
-        power = 2 * n - 1 - i  # need to handle the bit power first
+        power = 2 * n - 1 - i  # need to handle the highest power first
         circ.h(e[0])
         circ.extend(modulo_mul(n, v ** (1 << power), N))
         for j in range(i):
@@ -188,22 +188,43 @@ def quantum_period(n: int, v: int, N: int) -> QuantumCircuit:
 
 
 if __name__ == "__main__":
-    a, N = 5, 21
+    a, N = 7, (3 * 5)  # working: 2,9: 2,15; 2,21;
     n = ceil(log(N, 2))
-    shots = 20
+    shots = 1
+    r = 1
 
-    circ = quantum_period(n, a, N)
     simulator = Aer.get_backend("qasm_simulator")
 
-    # Execute and get counts
-    result = execute(circ, simulator, shots=shots).result().get_counts(circ)
-    result = {k[::2]: v for k, v in result.items()}
+    # for j in range(n * 2):
+    #     circ = modulo_exp(n, a, j, N)
+    #     print(execute(circ, simulator).result().get_counts(circ))
 
-    print(result)
+    circ = quantum_period(n, a ** r, N)
 
-    period = defaultdict(int)
-    for value, times in result.items():
-        value = int(value, 2)
-        period[post_process(value, n, N)] += times
+    while True:
+        # Execute and get counts
+        result = execute(circ, simulator, shots=shots).result().get_counts(circ)
+        result = {k[::2]: v for k, v in result.items()}
 
-    print(period)
+        print(f"Quantum part returned these values: {sorted(result.items())}")
+
+        period = defaultdict(int)
+        for value, times in result.items():
+            value = int(value, 2)
+            period[post_process(value, n, N)] += times
+
+        print(f"New factors of the period: {sorted(period.items())}")
+
+        r *= max(period.keys())
+        if a ** r % N == 1:
+            print(f"Found the period: {r}")
+            factor = factor_finder(r, a, N)
+            if factor is not None:
+                print(f"Prime factors found: {factor[0]}, {factor[1]}")
+            else:
+                print("The period didn't result in a factorisation")
+            break
+
+        print("Period not found, trying Shor again.")
+        if max(period.keys()) != 1:
+            circ = quantum_period(n, a ** r, N)

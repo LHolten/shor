@@ -1,8 +1,8 @@
 from qiskit.circuit import QuantumRegister, QuantumCircuit, Qubit, ClassicalRegister
 from qiskit import Aer, execute
-from math import pi, log, ceil, gcd
+from math import pi, log, ceil
 from collections import defaultdict
-from utils import modinv, post_process
+from utils import modinv, post_process, factor_finder
 
 # calculates the overflow bit for a + v if e[1]
 # assumes c is zeroed, the result is stored in e[2]
@@ -160,79 +160,61 @@ def quantum_period(n: int, v: int, N: int) -> QuantumCircuit:
     a = QuantumRegister(n, "a")
     c = QuantumRegister(n, "c")
     e = QuantumRegister(3, "e")
-    r = [ClassicalRegister(1) for r in range(2 * n)]
+    r = [ClassicalRegister(1) for _ in range(2 * n)]
     circ = QuantumCircuit(x, a, c, e, *r)
     circ.x(x[0])  # start with value 1
 
     for i in range(2 * n):
-        power = 2 * n - 1 - i  # need to handle the bit power first
+        power = 2 * n - 1 - i  # need to handle the highest power first
         circ.h(e[0])
         circ.extend(modulo_mul(n, v ** (1 << power), N))
         for j in range(i):
             circ.p(-pi / 2 ** (i - j), e[0]).c_if(r[j], 1)
         circ.h(e[0])
         circ.measure(e[0], r[i])
-        # circ.x(e[0]).c_if(r[i], 1)
+        circ.x(e[0]).c_if(r[i], 1)
 
     return circ
 
 
-def factor_finder(r: int):
-    if r % 2:
-        return False
-    else:
-        x = int(a ** (r / 2) % N)
-        if (x + 1) % N != 0:
-            p, q = gcd(x + 1, N), gcd(x - 1, N)
-            if (p * q == N) and p > 1 and q > 1:
-                return [p,q]
-            elif N > p > 1:
-                other = int(N/p)
-                return [p, other]
-            elif N > q > 1:
-                other = int(N/q)
-                return [q, other]
-            else:
-                return False
-        else:
-            return False
-
 if __name__ == "__main__":
-    a, N = 5, (3*11) #working: 2,9: 2,15; 2,21;
+    a, N = 7, (3 * 11)  # working: 2,9: 2,15; 2,21;
     n = ceil(log(N, 2))
     shots = 1
-    found = False
+    r = 1
 
     simulator = Aer.get_backend("qasm_simulator")
-    
-    while not found:
-       circ = quantum_period(n, a, N)
 
-       # Execute and get counts
-       result = execute(circ, simulator, shots=shots).result().get_counts(circ)
-       result = {k[::2]: v for k, v in result.items()}
-
-       print(result)
-
-       period = defaultdict(int)
-       for value, times in result.items():
-           value = int(value, 2)
-           period[post_process(value, n, N)] += times
-
-       print (period)
-
-       for r in list(period.keys()):
-           factor = factor_finder(r)
-           if factor:
-               print("Prime factors found: {}, {}".format(factor[0],factor[1]))
-               found = True
-               break
-       if not found:
-           print("Prime factors not found, trying Shor again.")
-        
-    # print(circ.draw("text"))
-
-    # for j in range(10):
-    #     circ = modulo_exp(4, 2, j, 15)
-    #     simulator = Aer.get_backend("qasm_simulator")
+    # for j in range(n * 2):
+    #     circ = modulo_exp(n, a, j, N)
     #     print(execute(circ, simulator).result().get_counts(circ))
+
+    circ = quantum_period(n, a ** r, N)
+
+    while True:
+        # Execute and get counts
+        result = execute(circ, simulator, shots=shots).result().get_counts(circ)
+        result = {k[::2]: v for k, v in result.items()}
+
+        print(f"Quantum part returned these values: {sorted(result.items())}")
+
+        period = defaultdict(int)
+        for value, times in result.items():
+            value = int(value, 2)
+            period[post_process(value, n, N)] += times
+
+        print(f"New factors of the period: {sorted(period.items())}")
+
+        r *= max(period.keys())
+        if a ** r % N == 1:
+            print(f"Found the period: {r}")
+            factor = factor_finder(r, a, N)
+            if factor is not None:
+                print(f"Prime factors found: {factor[0]}, {factor[1]}")
+            else:
+                print("The period didn't result in a factorisation")
+            break
+
+        print("Period not found, trying Shor again.")
+        if max(period.keys()) != 1:
+            circ = quantum_period(n, a ** r, N)
