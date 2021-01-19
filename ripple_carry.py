@@ -199,7 +199,7 @@ def factor_finder(r: int):
             return False
 
 if __name__ == "__main__":
-    a, N = 2, (3*11) #working: 2,9: 2,15; 2,21; 2,33
+    a, N = 2, (3*17) #working: 2,15; 2,21; 2,33; 2,35; 2,39; 
     n = ceil(log(N, 2))
     shots = 1
     found = False
@@ -207,8 +207,8 @@ if __name__ == "__main__":
     simulator = Aer.get_backend("qasm_simulator")
     succes = 0
     timearr = []
-    times = 10
-    for i in range(10):
+    tries = 10
+    for i in range(tries):
         time1 = time()
         circ = quantum_period(n, a, N)
 
@@ -234,8 +234,8 @@ if __name__ == "__main__":
         #if not found:
         #    print("Prime factors not found, trying Shor again.")
         timearr.append(time()-time1)
-    print("rate = {}".format(succes/times*100))
-    print("avg time = {}".format(sum(timearr)/times))
+    print("rate = {}".format(succes/tries*100))
+    print("avg time = {}".format(sum(timearr)/tries))
     # print(circ.draw("text"))
 
     # for j in range(10):
