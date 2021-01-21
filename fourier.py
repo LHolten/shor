@@ -5,10 +5,12 @@ from utils import modinv, post_process, factor_finder
 from collections import defaultdict
 
 
-# `n` has to be at least 2
-# e[1] is toggled when there is an overflow and x[0]
-# e[2] is toggled when there is no overflow and x[0]
 def carry_dirty(n: int, v: int):
+    """
+    if x[0]:  # conditioned on `x[0]`
+        e[1] ^= (a + v)[n]  # flip e[1] if there is an overflow
+        e[2] ^= (a + v)[n] ^ 1  # flip e[2] if there is no overflow
+    """
     a = QuantumRegister(n, "a")
     x = QuantumRegister(n, "x")
     e = QuantumRegister(3, "e")
@@ -62,8 +64,10 @@ def carry_dirty(n: int, v: int):
     return circ
 
 
-# applies the fourier transform
 def qft(n: int):
+    """
+    This applies the quantum fourier transform to `a`.
+    """
     a = QuantumRegister(n, "a")
     circ = QuantumCircuit(a)
 
@@ -75,8 +79,13 @@ def qft(n: int):
     return circ
 
 
-# adds one or two constants based on e[1] and e[2]
 def add_const(n: int, v1: int, v2: int):
+    """
+    if e[1]:
+        a += v1
+    if e[2]:
+        a += v2
+    """
     a = QuantumRegister(n, "a")
     e = QuantumRegister(3, "e")
     circ = QuantumCircuit(a, e)
@@ -90,8 +99,13 @@ def add_const(n: int, v1: int, v2: int):
     return circ
 
 
-# adds a constants `v` modulo `N` conditioned on x[0]
 def modulo_add(n: int, v: int, N: int):
+    """
+    assert not e[1] and not e[2]
+
+    if x[0]:  # the addition is condition on the first bit of `x`
+        a = (a + v) % N
+    """
     a = QuantumRegister(n, "a")
     x = QuantumRegister(n, "x")
     e = QuantumRegister(3, "e")
@@ -106,9 +120,14 @@ def modulo_add(n: int, v: int, N: int):
     return circ
 
 
-# calculates x = v * x % N if e[0]
-# assumes a and e[1] and e[2] are zeroed
 def modulo_mul(n: int, v: int, N: int) -> QuantumCircuit:
+    """
+    assert a == 0
+    assert not e[1] and not e[2]
+
+    if e[0]:
+        x = (v * x) % N
+    """
     a = QuantumRegister(n, "a")
     x = QuantumRegister(n, "x")
     e = QuantumRegister(3, "e")
@@ -148,6 +167,14 @@ def modulo_mul(n: int, v: int, N: int) -> QuantumCircuit:
 
 
 def modulo_exp(n: int, v: int, exp: int, N: int):
+    """
+    assert a == 0
+    assert x == 0
+    assert not e[0] and not e[1] and not e[2]
+
+    x = (v ** exp) % N
+    r = x 
+    """
     x = QuantumRegister(n, "x")
     a = QuantumRegister(n, "a")
     e = QuantumRegister(3, "e")
@@ -167,6 +194,11 @@ def modulo_exp(n: int, v: int, exp: int, N: int):
 
 
 def quantum_period(n: int, v: int, N: int) -> QuantumCircuit:
+    """
+    returns a number close to `N * k / period` where `k` is an integer.
+    `e[0]` is the control qubit which is used for the conditional modular multiplication 
+    and then read out into the `r` register repeatedly.
+    """
     x = QuantumRegister(n, "x")
     a = QuantumRegister(n, "a")
     e = QuantumRegister(3, "e")
