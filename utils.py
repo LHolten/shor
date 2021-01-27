@@ -50,11 +50,7 @@ def factor_finder(r: int, a: int, N: int) -> list:
 
     x = a ** (r // 2) % N
     if (x + 1) % N != 0:
-        p, q = gcd(x + 1, N), gcd(x - 1, N)
-        if N % p == 0:
-            return [p, N // p]
-        if N % q == 0:
-            return [q, N // q]
+        return [gcd(x + 1, N), gcd(x - 1, N)]
 
     return None
 
